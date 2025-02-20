@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Phonery - Phone Number Extractor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+</head>
+
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col">
+  <!-- Custom Title Bar -->
+  <div class="drag-region h-12 bg-gray-800 flex items-center justify-end px-4 space-x-4">
+    <button id="min-btn" class="window-control text-gray-400 hover:text-white">
+      <i class="fa fa-minus"></i>
+    </button>
+    <button id="max-btn" class="window-control text-gray-400 hover:text-white">
+      <i class="fa fa-window-maximize"></i>
+    </button>
+    <button id="close-btn" class="window-control text-gray-400 hover:text-red-500">
+      <i class="fa fa-times"></i>
+    </button>
+  </div>
+
+  <!-- Main Content -->
+  <div class="flex-1 p-8 flex flex-col items-center justify-center">
+    <!-- Loading Overlay -->
+    <div id="loading" class="hidden fixed inset-0 bg-gray-900 bg-opacity-90 flex items-center justify-center z-50">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+    </div>
+
+    <div class="w-full max-w-2xl bg-gray-800 rounded-xl p-8 shadow-xl space-y-6">
+      <h1 class="text-3xl font-bold text-center">Phonery - Phone Number Extractor</h1>
+      <div class="space-y-2 mb-4">
+        <label for="prefix-input" class="block text-sm font-medium text-gray-300">
+          Filter Starts (separate with comma)
+        </label>
+        <input id="prefix-input" type="text" value="05"
+          class="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded-md focus:outline-none focus:ring focus:border-blue-300"
+          placeholder="Örn: 05,06,07">
+      </div>
+
+      <!-- File Drop Zone -->
+      <div id="drop-zone"
+        class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors">
+        <p class="text-gray-400">Drag Excel files here or</p>
+        <button id="select-files"
+          class="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors font-medium">Select
+          Files</button>
+      </div>
+
+      <!-- Results -->
+      <div id="results" class="hidden space-y-4">
+        <div class="flex justify-between items-center">
+          <span>Phone Numbers:</span>
+          <span id="count" class="font-bold text-blue-500">0</span>
+        </div>
+        <button id="download"
+          class="w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg transition-colors font-medium">Download
+          (.txt)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-gray-800 text-gray-400 text-center py-3">
+    <p>
+      Producer: <a href="https://github.com/umutxyp" class="hover:text-white external-link">umutxyp</a> | Powered by <a
+        href="https://codeshare.me" class="hover:text-white external-link">codeshare.me</a>
+    </p>
+  </footer>
+
+  <script>
+
+    const { shell } = require('electron');
+
+    document.querySelectorAll('.external-link').forEach(link => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const url = link.href;
+        shell.openExternal(url);
+      });
+    });
+
+    const { ipcRenderer } = require('electron');
+    window.electron = {
+      send: ipcRenderer.send.bind(ipcRenderer),
+      on: ipcRenderer.on.bind(ipcRenderer),
+      invoke: ipcRenderer.invoke.bind(ipcRenderer)
+    };
+
+    let phoneNumbers = [];
+
+    document.getElementById('select-files').addEventListener('click', async () => {
+      const filePaths = await window.electron.invoke('open-dialog');
+      if (filePaths && filePaths.length > 0) {
+        processFiles(filePaths);
+      }
+    });
+
+    document.getElementById('download').addEventListener('click', () => {
+      const blob = new Blob([phoneNumbers.join('\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `phone-numbers-${Date.now()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    ['min-btn', 'max-btn', 'close-btn'].forEach(id => {
+      document.getElementById(id).addEventListener('click', () => {
+        window.electron.send(id.replace('-btn', ''));
+      });
+    });
+
+    window.electron.on('maximize', () => {
+      const maxBtnIcon = document.querySelector('#max-btn i');
+      maxBtnIcon.classList.remove('fa-window-maximize');
+      maxBtnIcon.classList.add('fa-window-restore');
+    });
+
+    window.electron.on('unmaximize', () => {
+      const maxBtnIcon = document.querySelector('#max-btn i');
+      maxBtnIcon.classList.remove('fa-window-restore');
+      maxBtnIcon.classList.add('fa-window-maximize');
+    });
+
+    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('drop', e => e.preventDefault());
+
+    document.getElementById('drop-zone').addEventListener('drop', async e => {
+      e.preventDefault();
+      const files = Array.from(e.dataTransfer.files)
+        .filter(f => f.name.match(/\.xlsx?$/i));
+      if (files.length > 0) {
+        processFiles(files.map(f => f.path));
+      }
+    });
+
+    async function processFiles(paths) {
+      try {
+        showLoading(true);
+        const prefixInput = document.getElementById('prefix-input').value;
+        const prefixes = prefixInput.split(',')
+          .map(p => p.trim())
+          .filter(p => p !== '');
+        phoneNumbers = await window.electron.invoke('process-files', { files: paths.map(p => ({ path: p })), prefixes });
+        document.getElementById('results').classList.remove('hidden');
+        document.getElementById('count').textContent = phoneNumbers.length;
+      } catch (error) {
+        console.error(error);
+        alert('An error occurred while processing the files.');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    function showLoading(show) {
+      document.getElementById('loading').classList.toggle('hidden', !show);
+    }
+  </script>
+</body>
+
+</html>

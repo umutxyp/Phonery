@@ -1,0 +1,44 @@
+{
+    "name": "phonery",
+    "version": "1.0.0",
+    "main": "main.js",
+    "scripts": {
+      "start": "electron .",
+      "package": "electron-forge package",
+      "make": "electron-forge make"
+    },
+    "devDependencies": {
+      "@electron-forge/cli": "^6.2.1",
+      "@electron-forge/maker-deb": "^6.2.1",
+      "@electron-forge/maker-rpm": "^6.2.1",
+      "@electron-forge/maker-squirrel": "^6.4.2",
+      "@electron-forge/maker-zip": "^6.2.1",
+      "electron": "^28.1.0",
+      "tailwindcss": "^3.4.1"
+    },
+    "dependencies": {
+      "electron-squirrel-startup": "^1.0.0",
+      "xlsx": "^0.18.5"
+    },
+    "config": {
+      "forge": {
+        "packagerConfig": {
+          "icon": "phonery" 
+        },
+        "makers": [
+          {
+            "name": "@electron-forge/maker-squirrel",
+            "config": {
+              "name": "phonery",
+              "setupExe": "PhoneryInstaller.exe"
+            }
+          },
+          {
+            "name": "@electron-forge/maker-zip",
+            "platforms": ["win32"]
+          }
+        ]
+      }
+    }
+  }
+  
